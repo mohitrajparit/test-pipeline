@@ -3,6 +3,21 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "scripts": { "dev": "node --watch server.js", "start": "node server.js" },
-  "dependencies": { "cors": "^2.8.5", "dotenv": "^16.4.7", "express": "^5.1.0", "pg": "^8.13.1" }
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "lint": "eslint . --ext .js,.jsx",
+"lint:fix": "eslint . --ext .js,.jsx --fix",
+"format": "prettier --write ."
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "eslint": "^10.9.1",
+    "prettier": "^3.9.6"
+  }
 }
