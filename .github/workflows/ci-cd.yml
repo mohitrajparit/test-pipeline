@@ -47,10 +47,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Validate EC2 host
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          if [ -z "$EC2_HOST" ]; then
+            echo "EC2_HOST secret is empty or not configured"
+            exit 1
+          fi
+          case "$EC2_HOST" in
+            http://*|https://*|*:*)
+              echo "EC2_HOST must be only the EC2 public IP or DNS name"
+              exit 1
+              ;;
+          esac
+
       - name: Add EC2 host to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -T 10 -H "$EC2_HOST" >> ~/.ssh/known_hosts
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
 
