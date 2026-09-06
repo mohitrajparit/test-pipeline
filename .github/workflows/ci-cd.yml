@@ -41,12 +41,18 @@ jobs:
       - name: Build frontend Docker image
         run: docker build -t frontend ./client
 
+
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: build-and-lint
     runs-on: ubuntu-latest
 
     steps:
+
+      # ----------------------------------------
+      # 1. Validate EC2 host
+      # ----------------------------------------
+
       - name: Validate EC2 host
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
@@ -55,6 +61,9 @@ jobs:
             echo "EC2_HOST secret is empty or not configured"
             exit 1
           fi
+
+          echo "EC2_HOST is configured"
+
           case "$EC2_HOST" in
             http://*|https://*|*:*)
               echo "EC2_HOST must be only the EC2 public IP or DNS name"
@@ -62,19 +71,97 @@ jobs:
               ;;
           esac
 
-      - name: Add EC2 host to known_hosts
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -T 10 -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+      # ----------------------------------------
+      # 2. Test port 22
+      # ----------------------------------------
+
+      - name: Test SSH connectivity
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          echo "Testing port 22 on $EC2_HOST..."
+
+          if timeout 15 bash -c "</dev/tcp/$EC2_HOST/22"; then
+            echo "SUCCESS: Port 22 is reachable"
+          else
+            echo "ERROR: Port 22 is NOT reachable"
+            echo "Check EC2 Security Group and Network ACL"
+            exit 1
+          fi
+
+
+      # ----------------------------------------
+      # 3. Setup SSH
+      # ----------------------------------------
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+
+      # ----------------------------------------
+      # 4. Add EC2 to known_hosts
+      # ----------------------------------------
+
+      - name: Add EC2 host to known_hosts
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          echo "Getting SSH host key..."
+
+          ssh-keyscan -4 -T 15 -H "$EC2_HOST" 2>&1 | tee /tmp/keyscan.log
+
+          if ! grep -q "ssh-" /tmp/keyscan.log; then
+            echo "ERROR: Could not get SSH host key"
+            cat /tmp/keyscan.log
+            exit 1
+          fi
+
+          ssh-keyscan -4 -T 15 -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+          echo "SUCCESS: EC2 added to known_hosts"
+
+
+      # ----------------------------------------
+      # 5. Write SSH private key
+      # ----------------------------------------
 
       - name: Write SSH key
-        run: |
-          echo "${EC2_KEY}" > ec2_key.pem
-          chmod 600 ec2_key.pem
         env:
           EC2_KEY: ${{ secrets.EC2_KEY }}
+        run: |
+          printf '%s\n' "$EC2_KEY" > ec2_key.pem
+          chmod 600 ec2_key.pem
+
+          echo "SSH key created"
+
+
+      # ----------------------------------------
+      # 6. Test SSH login
+      # ----------------------------------------
+
+      - name: Test SSH login
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          echo "Testing SSH login..."
+
+          ssh \
+            -4 \
+            -i ec2_key.pem \
+            -o IdentitiesOnly=yes \
+            -o ConnectTimeout=15 \
+            -o StrictHostKeyChecking=yes \
+            "${EC2_USER}@${EC2_HOST}" \
+            "echo 'SSH LOGIN SUCCESSFUL'"
+
+
+      # ----------------------------------------
+      # 7. Deploy
+      # ----------------------------------------
 
       - name: Deploy on EC2
         env:
@@ -82,12 +169,48 @@ jobs:
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
         run: |
-          ssh -i ec2_key.pem ${EC2_USER}@${EC2_HOST} << EOF
+          echo "Starting deployment..."
+
+          ssh \
+            -4 \
+            -i ec2_key.pem \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "${EC2_USER}@${EC2_HOST}" << EOF
+
           set -e
-          cd "${EC2_APP_DIR}" || exit 1
-          git fetch --all
+
+          echo "Connected to EC2"
+
+          cd "${EC2_APP_DIR}"
+
+          echo "Current directory:"
+          pwd
+
+          echo "Fetching latest code..."
+
+          git fetch origin main
+
+          echo "Resetting to latest main..."
+
           git reset --hard origin/main
+
+          echo "Stopping old containers..."
+
+          docker compose down
+
+          echo "Building and starting containers..."
+
           docker compose up -d --build
+
+          echo "Removing unused Docker images..."
+
           docker image prune -f
+
+          echo "Container status:"
+
           docker compose ps
+
+          echo "Deployment completed successfully"
+
           EOF
