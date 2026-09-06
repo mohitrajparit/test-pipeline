@@ -8,7 +8,9 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const apiUrl = import.meta.env.VITE_API_URL
+  const apiUrl = (import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000/api`)
+    .replace('localhost', window.location.hostname)
+    .replace('127.0.0.1', window.location.hostname)
 
   useEffect(() => {
     fetch(`${apiUrl}/tasks`).then((response) => {
