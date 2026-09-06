@@ -65,7 +65,7 @@ function App() {
         {error && <p className="error">{error}</p>}
         <div className="task-list">{loading ? <p className="empty-state">Loading your list...</p> : visibleTasks.length === 0 ? <p className="empty-state">Nothing here yet. Add the first small thing.</p> : visibleTasks.map((task) => <article className={`task ${task.completed ? 'done' : ''}`} key={task.id}><button className="check" type="button" aria-label={`Mark ${task.title} ${task.completed ? 'active' : 'complete'}`} onClick={() => toggleTask(task)}>{task.completed ? '✓' : ''}</button><span className="task-title">{task.title}</span><span className="task-date">{new Date(task.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span><button className="delete" type="button" aria-label={`Delete ${task.title}`} onClick={() => deleteTask(task.id)}>×</button></article>)}</div>
       </section>
-      <footer>Built for focus <span>·</span> {tasks.length} total {tasks.length === 1 ? 'item' : 'items'}</footer>
+      <footer>Built for focus <span>·</span> {tasks.length} total {tasks.length === 1 ? 'item' : 'items'} <span>·</span> Developed by mohit-raj-parit-2026</footer>
     </main>
   )
 }
